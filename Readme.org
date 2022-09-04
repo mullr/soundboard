@@ -1,0 +1,19 @@
+* A simple remote-controlled soundboard
+This is a trivial soundboard program that is controllable via a web
+browser, but plays the sounds on the computer where it's running. I
+build this to use this in conjunction with discord-audio-pipe for my
+online RPG games, controlled from my iPad.
+
+** Installation
+Get rust, cargo, etc. Then clone this repo, and:
+#+begin_src sh
+  cargo install --path .
+#+end_src
+
+** Usage
+#+begin_src sh
+  soundboard -d <directory full of audio files>
+             -d <another one, if you like>
+#+end_src
+** License
+MIT; See LICENSE.
