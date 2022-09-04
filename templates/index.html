@@ -1,0 +1,31 @@
+<html>
+  <body>
+    <b>The Soundboard</b>
+    <hr />
+    <big><b><a onclick="stop_all()" href="#">STOP ALL</a></b></big>
+    <hr />
+    {% for collection in library.collections %}
+    <div>
+      Collection: {{ collection.name }} at {{ collection.directory.display() }}
+      <ul>
+        {% for clip in collection.clips %}
+        <li> <a onclick="play({{collection.id}}, {{clip.id}})" href="#">{{ clip.name }}</a></li>
+        {% endfor%}
+      </ul>
+    </div>
+    {% endfor %}
+  </body>
+
+  <script>
+    function play(coll_id, clip_id) {
+        fetch(`/collection/${coll_id}/clip/${clip_id}/play`,
+              { method: 'POST', body: {}})
+            .then( function(response) { console.log(response); });
+    }
+
+    function stop_all() {
+        fetch('/stop_all', { method: 'POST', body: {}})
+            .then( function(response) { console.log(response); });
+    }
+  </script>
+</html>
