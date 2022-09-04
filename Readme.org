@@ -1,7 +1,7 @@
 * A simple remote-controlled soundboard
 This is a trivial soundboard program that is controllable via a web
 browser, but plays the sounds on the computer where it's running. I
-build this to use this in conjunction with discord-audio-pipe for my
+built this to use this in conjunction with discord-audio-pipe for my
 online RPG games, controlled from my iPad.
 
 ** Installation
