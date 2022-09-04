@@ -15,7 +15,7 @@
         <hr />
         {% for collection in library.collections %}
         <div class="d-grid gap-3">
-          <!-- Collection: {{ collection.name }} at {{ collection.directory.display() }} -->
+          <h1 style="margin-top: 0.5em">{{ collection.name }}</h1>
           {% for clip_chunk in collection.clips.chunks(3) %}
           <div class="row">
             {% for clip in clip_chunk %}
