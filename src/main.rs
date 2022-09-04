@@ -5,7 +5,7 @@ mod server;
 use clap::Parser;
 use model::{Collection, Library};
 use player::Player;
-use std::{path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::error;
 
@@ -29,14 +29,17 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (player, _stream) = Player::new()?;
     let player = Arc::new(Mutex::new(player));
 
-    server::run_server(args.port, library, player).await
+    server::run_server(args.address, library, player).await
 }
 
 #[derive(clap::Parser)]
 struct Args {
-    #[clap(short, long)]
+    /// A directory full of audio files, to use for the
+    /// soundboard. May be provided more than once.
+    #[clap(short, long, required(true))]
     directory: Vec<PathBuf>,
 
-    #[clap(short, long, value_parser, default_value_t = 14181)]
-    port: u16,
+    /// What address to listen on.
+    #[clap(short, long, value_parser, default_value = "127.0.0.1:14181")]
+    address: SocketAddr,
 }

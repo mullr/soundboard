@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use askama::Template;
 use axum::{
@@ -14,7 +14,7 @@ use tracing::{error, info, warn};
 use crate::{model::Library, player::Player};
 
 pub async fn run_server(
-    port: u16,
+    address: SocketAddr,
     library: Arc<Library>,
     player: Arc<Mutex<Player>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -27,10 +27,9 @@ pub async fn run_server(
         .layer(Extension(library))
         .layer(Extension(player));
 
-    info!(%port, "Running http server");
+    info!("Running http server on http://{address}");
 
-    // run it with hyper on localhost:3000
-    Ok(axum::Server::bind(&format!("0.0.0.0:{port}").parse()?)
+    Ok(axum::Server::bind(&address)
         .serve(app.into_make_service())
         .await?)
 }
