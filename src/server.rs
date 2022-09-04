@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 
 use crate::{model::Library, player::Player};
 
-pub async fn run_server(library: Arc<Library>, player: Arc<Mutex<Player>>) {
+pub async fn run_server(port: u16, library: Arc<Library>, player: Arc<Mutex<Player>>) {
     // build our application with a single route
     let app = Router::new()
         .route("/", get(root))
@@ -23,7 +23,7 @@ pub async fn run_server(library: Arc<Library>, player: Arc<Mutex<Player>>) {
         .layer(Extension(player));
 
     // run it with hyper on localhost:3000
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+    axum::Server::bind(&format!("0.0.0.0:{port}").parse().unwrap())
         .serve(app.into_make_service())
         .await
         .unwrap();
