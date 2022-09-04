@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use askama::Template;
 use axum::{
     extract::Path,
     http::StatusCode,
@@ -7,12 +8,16 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
-use askama::Template;
 use tokio::sync::Mutex;
+use tracing::{error, info, warn};
 
 use crate::{model::Library, player::Player};
 
-pub async fn run_server(port: u16, library: Arc<Library>, player: Arc<Mutex<Player>>) {
+pub async fn run_server(
+    port: u16,
+    library: Arc<Library>,
+    player: Arc<Mutex<Player>>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // build our application with a single route
     let app = Router::new()
         .route("/", get(root))
@@ -22,11 +27,12 @@ pub async fn run_server(port: u16, library: Arc<Library>, player: Arc<Mutex<Play
         .layer(Extension(library))
         .layer(Extension(player));
 
+    info!(%port, "Running http server");
+
     // run it with hyper on localhost:3000
-    axum::Server::bind(&format!("0.0.0.0:{port}").parse().unwrap())
+    Ok(axum::Server::bind(&format!("0.0.0.0:{port}").parse()?)
         .serve(app.into_make_service())
-        .await
-        .unwrap();
+        .await?)
 }
 
 struct HtmlTemplate<T>(T);
@@ -57,29 +63,32 @@ async fn root(Extension(library): Extension<Arc<Library>>) -> impl IntoResponse 
     HtmlTemplate(template)
 }
 
-
 async fn play_clip(
     Path((coll_id, clip_id)): Path<(u64, u64)>,
     Extension(library): Extension<Arc<Library>>,
     Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
-) -> impl IntoResponse {
-    let mut player = player_mutex.lock().await;
-    let path = match library.clip_path(coll_id, clip_id) {
-        Some(p) => p,
-        None => return (StatusCode::NOT_FOUND, "Uknown clip id"),
-    };
-    player.play_clip(coll_id, clip_id , path);
-    println!("Play clip {coll_id}/{clip_id}");
+) -> Result<String, StatusCode> {
+    info!("Play clip {coll_id}/{clip_id}");
 
-    (StatusCode::ACCEPTED, "Playing")
+    let mut player = player_mutex.lock().await;
+    let path = library
+        .clip_path(coll_id, clip_id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    player.play_clip(coll_id, clip_id, path).map_err(|e| {
+        error!(err = %&e as &dyn std::error::Error, "Error playing clip");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok("Playing".to_string())
 }
 
 async fn stop_clip(Path((coll_id, clip_id)): Path<(u64, u64)>) {
-    println!("Play clip {coll_id}/{clip_id}")
+    warn!("Stop clip {coll_id}/{clip_id} UNIMPLEMENTED")
 }
 
 async fn stop_all(Extension(player_mutex): Extension<Arc<Mutex<Player>>>) {
+    info!("Stop all");
     let mut player = player_mutex.lock().await;
     player.stop_all();
-    println!("Stop all")
 }

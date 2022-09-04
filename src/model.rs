@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-
 #[derive(Default)]
 pub struct Library {
     pub collections: Vec<Collection>,
@@ -78,5 +77,3 @@ impl Clip {
         })
     }
 }
-
-
