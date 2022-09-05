@@ -14,17 +14,8 @@ impl Library {
         self.collections.push(coll);
     }
 
-    pub fn clip_path(&self, coll_id: u64, clip_id: u64) -> Option<PathBuf> {
-        Some(
-            self.collections
-                .iter()
-                .find(|coll| coll.id == coll_id)?
-                .clips
-                .iter()
-                .find(|clip| clip.id == clip_id)?
-                .path
-                .to_owned(),
-        )
+    pub fn collection(&self, coll_id: u64) -> Option<&Collection> {
+        self.collections.iter().find(|coll| coll.id == coll_id)
     }
 }
 
@@ -34,10 +25,30 @@ pub struct Collection {
     pub name: String,
     pub directory: PathBuf,
     pub clips: Vec<Clip>,
+    pub kind: CollectionKind,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub enum CollectionKind {
+    Drops,
+    Music,
+    Fx,
+    Ambience,
+}
+impl CollectionKind {
+    pub fn loop_playback(&self) -> bool {
+        match self {
+            CollectionKind::Drops | CollectionKind::Fx => false,
+            CollectionKind::Music | CollectionKind::Ambience => true,
+        }
+    }
 }
 
 impl Collection {
-    pub fn from_dir(path: impl AsRef<std::path::Path>) -> std::io::Result<Self> {
+    pub fn from_dir(
+        path: impl AsRef<std::path::Path>,
+        kind: CollectionKind,
+    ) -> std::io::Result<Self> {
         let path = path.as_ref();
         let mut clips = vec![];
         for entry in std::fs::read_dir(path)? {
@@ -59,7 +70,12 @@ impl Collection {
                 .unwrap_or_else(|| "<unknown>".to_string()),
             directory: path.to_owned(),
             clips,
+            kind,
         })
+    }
+
+    pub fn clip(&self, clip_id: u64) -> Option<&Clip> {
+        self.clips.iter().find(|clip| clip.id == clip_id)
     }
 }
 

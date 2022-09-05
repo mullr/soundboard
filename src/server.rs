@@ -79,14 +79,20 @@ async fn play_clip(
     info!("Play clip {coll_id}/{clip_id}");
 
     let mut player = player_mutex.lock().await;
-    let path = library
-        .clip_path(coll_id, clip_id)
-        .ok_or(StatusCode::NOT_FOUND)?;
+    let coll = library.collection(coll_id).ok_or(StatusCode::NOT_FOUND)?;
+    let clip = coll.clip(clip_id).ok_or(StatusCode::NOT_FOUND)?;
 
-    player.play_clip(coll_id, clip_id, path).map_err(|e| {
-        error!(err = %&e as &dyn std::error::Error, "Error playing clip");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    player
+        .play_clip(
+            coll_id,
+            clip_id,
+            clip.path.to_owned(),
+            coll.kind.loop_playback(),
+        )
+        .map_err(|e| {
+            error!(err = %&e as &dyn std::error::Error, "Error playing clip");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok("Playing".to_string())
 }

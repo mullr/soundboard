@@ -20,6 +20,7 @@ pub struct Collection {
     pub id: String,
     pub name: String,
     pub clips: Vec<Clip>,
+    pub kind: model::CollectionKind,
 }
 
 impl From<model::Collection> for Collection {
@@ -28,6 +29,7 @@ impl From<model::Collection> for Collection {
             id: m.id.to_string(),
             name: m.name,
             clips: m.clips.into_iter().map(|c| c.into()).collect(),
+            kind: m.kind,
         }
     }
 }

@@ -16,8 +16,14 @@ use thiserror::Error;
 
 pub struct Player {
     manager: AudioManager,
-    playing: HashMap<ClipId, StaticSoundHandle>,
+    playing: HashMap<ClipId, PlayingSound>,
     pending_events: Vec<PlayerEvent>,
+}
+
+struct PlayingSound {
+    sound_data: StaticSoundData,
+    handle: StaticSoundHandle,
+    loop_playback: bool,
 }
 
 impl Player {
@@ -35,13 +41,18 @@ impl Player {
 
     pub fn poll_events(&mut self) -> Vec<PlayerEvent> {
         let mut to_remove = vec![];
-        for (id, handle) in self.playing.iter() {
-            if handle.state() == PlaybackState::Stopped {
-                self.pending_events.push(PlayerEvent::Stopped {
-                    coll_id: id.coll_id,
-                    clip_id: id.clip_id,
-                });
-                to_remove.push((*id).clone());
+        for (id, playing_sound) in self.playing.iter_mut() {
+            if playing_sound.handle.state() == PlaybackState::Stopped {
+                if playing_sound.loop_playback {
+                    playing_sound.handle =
+                        self.manager.play(playing_sound.sound_data.clone()).unwrap();
+                } else {
+                    self.pending_events.push(PlayerEvent::Stopped {
+                        coll_id: id.coll_id,
+                        clip_id: id.clip_id,
+                    });
+                    to_remove.push((*id).clone());
+                }
             }
         }
 
@@ -79,11 +90,19 @@ impl Player {
         coll_id: u64,
         clip_id: u64,
         path: PathBuf,
+        loop_playback: bool,
     ) -> Result<(), PlayerError> {
         let sound_data = StaticSoundData::from_file(path, StaticSoundSettings::default())?;
         let duration = sound_data.duration();
-        let handle = self.manager.play(sound_data)?;
-        self.playing.insert(ClipId { coll_id, clip_id }, handle);
+        let handle = self.manager.play(sound_data.clone())?;
+        self.playing.insert(
+            ClipId { coll_id, clip_id },
+            PlayingSound {
+                sound_data,
+                handle,
+                loop_playback,
+            },
+        );
         self.pending_events.push(PlayerEvent::Started {
             coll_id,
             clip_id,
@@ -95,8 +114,8 @@ impl Player {
 
     pub fn stop_clip(&mut self, coll_id: u64, clip_id: u64) -> Result<(), PlayerError> {
         let id = ClipId { coll_id, clip_id };
-        if let Some(handle) = self.playing.get_mut(&id) {
-            handle.stop(Tween {
+        if let Some(playing_sound) = self.playing.get_mut(&id) {
+            playing_sound.handle.stop(Tween {
                 duration: Duration::from_millis(200),
                 ..Default::default()
             })?;
@@ -111,8 +130,8 @@ impl Player {
     }
 
     pub fn stop_all(&mut self) -> Result<(), PlayerError> {
-        for (id, handle) in self.playing.iter_mut() {
-            handle.stop(Tween {
+        for (id, playing_sound) in self.playing.iter_mut() {
+            playing_sound.handle.stop(Tween {
                 duration: Duration::from_millis(200),
                 ..Default::default()
             })?;

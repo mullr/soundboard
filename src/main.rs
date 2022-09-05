@@ -21,8 +21,26 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Args::parse();
     let mut library = Library::default();
-    for d in args.directory.into_iter() {
-        library.add_collection(Collection::from_dir(d)?);
+
+    for d in args.drops.into_iter() {
+        library.add_collection(Collection::from_dir(d, model::CollectionKind::Drops)?);
+    }
+
+    for d in args.music.into_iter() {
+        library.add_collection(Collection::from_dir(d, model::CollectionKind::Music)?);
+    }
+
+    for d in args.fx.into_iter() {
+        library.add_collection(Collection::from_dir(d, model::CollectionKind::Fx)?);
+    }
+
+    for d in args.ambience.into_iter() {
+        library.add_collection(Collection::from_dir(d, model::CollectionKind::Ambience)?);
+    }
+
+    if library.collections.is_empty() {
+        println!("Error: At least one kind of library directory must be provided.");
+        return Ok(());
     }
 
     let library = Arc::new(library);
@@ -35,12 +53,23 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 #[derive(clap::Parser)]
 struct Args {
-    /// A directory full of audio files, to use for the
-    /// soundboard. May be provided more than once.
-    #[clap(short, long, required(true))]
-    directory: Vec<PathBuf>,
+    /// A directory with sound drops; relatively short pieces of music.
+    #[clap(short, long)]
+    drops: Vec<PathBuf>,
+
+    /// A directory with background music
+    #[clap(short, long)]
+    music: Vec<PathBuf>,
+
+    /// A directory with sound effects
+    #[clap(short, long)]
+    fx: Vec<PathBuf>,
+
+    /// A directory with ambience recordings
+    #[clap(short, long)]
+    ambience: Vec<PathBuf>,
 
     /// What address to listen on.
-    #[clap(short, long, value_parser, default_value = "127.0.0.1:14181")]
+    #[clap(long, value_parser, default_value = "127.0.0.1:14181")]
     address: SocketAddr,
 }

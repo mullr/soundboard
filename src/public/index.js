@@ -63,7 +63,8 @@ function App(props) {
                              el('hr'),
                              h(Collection, { id: coll.id,
                                              name: coll.name,
-                                             clips: coll.clips })))));
+                                             clips: coll.clips,
+                                             kind: coll.kind })))));
 }
 
 function Collection(props) {
@@ -81,7 +82,8 @@ function Collection(props) {
               e('div.row',
                 e('div.col',
                   e('span.fs-2.me-3', props.name),
-                  el('a', { href: "#", onClick: play_random }, "Random"))),
+                  e('span.badge.rounded-pill.text-bg-primary.me-3', props.kind),
+                  el('a', { href: "#", onClick: play_random }, "Play Random"))),
               chunks.map(chunk =>
                   e('div.row', chunk.map(clip =>
                       e('div.col-md-4',
