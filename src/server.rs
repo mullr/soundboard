@@ -1,23 +1,33 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
+use async_trait::async_trait;
 use axum::{
-    extract::Path,
+    extract::{FromRequest, Path, RequestParts},
     http::StatusCode,
     response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
     Extension, Json, Router,
 };
 use axum_static_macro::static_file;
-use futures::stream::Stream;
-use tokio::sync::Mutex;
+use futures::{stream::Stream, StreamExt, TryStreamExt};
+use tokio::sync::{
+    broadcast::{Receiver, Sender},
+    Mutex,
+};
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tracing::{error, info};
 
-use crate::{api, model::Library, player::Player};
+use crate::{
+    api,
+    model::Library,
+    player::{Player, PlayerEvent},
+};
 
 pub async fn run_server(
     address: SocketAddr,
     library: Arc<Library>,
     player: Arc<Mutex<Player>>,
+    player_event_broadcast: Sender<PlayerEvent>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     static_file!(index_html, "public/index.html", "text/html");
     static_file!(index_js, "public/index.js", "application/javascript");
@@ -58,7 +68,8 @@ pub async fn run_server(
         .route("/preact/debug.mjs", get(preact_debug_mjs))
         .route("/preact/devtools.mjs", get(preact_devtools_mjs))
         .layer(Extension(library))
-        .layer(Extension(player));
+        .layer(Extension(player))
+        .layer(Extension(player_event_broadcast));
 
     info!("Running http server on http://{address}");
 
@@ -137,25 +148,24 @@ async fn stop_all(
 }
 
 async fn events(
-    Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
-) -> Sse<impl Stream<Item = Result<Event, serde_json::error::Error>>> {
-    use async_stream::stream;
+    Extension(player_event_broadcast): Extension<Sender<PlayerEvent>>,
+) -> Sse<impl Stream<Item = Result<Event, Box<dyn std::error::Error + Send + Sync>>>> {
+    // use async_stream::stream;
 
-    let s = stream! {
-        loop {
-            let events = {
-                let mut player = player_mutex.lock().await;
-                player.poll_events()
-            };
-
-            if !events.is_empty() {
-                let api_events = events.into_iter().map(|ev| api::PlayerEvent::from(ev)).collect::<Vec<_>>();
-                yield Event::default().json_data(api_events);
+    let rx = player_event_broadcast.subscribe();
+    let s = tokio_stream::wrappers::BroadcastStream::new(rx).map(|ev_res| match ev_res {
+        Ok(ev) => match Event::default().json_data(api::PlayerEvent::from(ev)) {
+            Ok(e) => Ok(e),
+            Err(e) => {
+                let e: Box<dyn std::error::Error + Send + Sync> = Box::new(e);
+                Err(e)
             }
-
-            tokio::time::sleep(Duration::from_millis(250)).await;
+        },
+        Err(e) => {
+            let e: Box<dyn std::error::Error + Send + Sync> = Box::new(e);
+            Err(e)
         }
-    };
+    });
 
     Sse::new(s).keep_alive(KeepAlive::default())
 }

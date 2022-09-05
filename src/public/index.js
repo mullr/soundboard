@@ -25,6 +25,14 @@ class EventBus {
 
 const Bus = createContext(new EventBus());
 
+const KindDisplayName = {
+    "Drops": "Drops",
+    "BackgroundMusic": "Background Music",
+    "BattleMusic": "Battle Music",
+    "Fx": "FX",
+    "Ambience": "Ambience",
+};
+
 function App(props) {
     const [collections, setCollections] = useState([]);
     const bus = useContext(Bus);
@@ -51,7 +59,7 @@ function App(props) {
 
         return () => { event_source.close() };
     }, []);
-
+    
     return e('div.container',
              e('header',
                e('span.fs-1.me-3', "The Soundboard"),
@@ -64,7 +72,7 @@ function App(props) {
                              h(Collection, { id: coll.id,
                                              name: coll.name,
                                              clips: coll.clips,
-                                             kind: coll.kind })))));
+                                             kind: KindDisplayName[coll.kind]})))));
 }
 
 function Collection(props) {
@@ -75,7 +83,7 @@ function Collection(props) {
 
     let play_random = () => {
         let random_clip = props.clips[Math.floor(Math.random()*props.clips.length)];
-        play_request(props.id, random_clip.id);
+        play_clip_request(props.id, random_clip.id);
     };
 
     return el('div.d-grid.gap-3', { key: `coll-${props.id}` },
@@ -94,8 +102,8 @@ function Collection(props) {
 }
 
 function Clip(props) {
-    const play = () => play_request(props.coll_id, props.id);
-    const stop = () => stop_request(props.coll_id, props.id);
+    const play = () => play_clip_request(props.coll_id, props.id);
+    const stop = () => stop_clip_request(props.coll_id, props.id);
     const [playing, setPlaying] = useState(false);
 
     const on_message = (message) => {
@@ -126,11 +134,15 @@ function Clip(props) {
 
 render(h(App), document.body);
 
-function play_request(coll_id, clip_id) {
+function play_clip_request(coll_id, clip_id) {
     fetch(`/collection/${coll_id}/clip/${clip_id}/play`, { method: 'POST' });
 }
 
-function stop_request(coll_id, clip_id) {
+function stop_clip_request(coll_id, clip_id) {
+    fetch(`/collection/${coll_id}/clip/${clip_id}/stop`, { method: 'POST' });
+}
+
+function stop_coll_request(coll_id, clip_id) {
     fetch(`/collection/${coll_id}/clip/${clip_id}/stop`, { method: 'POST' });
 }
 

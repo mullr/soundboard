@@ -1235,6 +1235,7 @@ name = "soundboard"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "async-trait",
  "axum",
  "axum_static_macro",
  "clap",
@@ -1484,6 +1485,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df54d54117d6fdc4e4fea40fe1e4e566b3505700e148a6827e59b34b0d2600d9"
 dependencies = [
  "futures-core",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "tokio-util"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc463cd8deddc3770d20f9852143d50bf6094e640b485cb2e189a2099085ff45"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
  "pin-project-lite",
  "tokio",
 ]

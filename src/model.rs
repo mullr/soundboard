@@ -31,7 +31,8 @@ pub struct Collection {
 #[derive(Copy, Clone, Debug, serde::Serialize, Eq, PartialEq)]
 pub enum CollectionKind {
     Drops,
-    Music,
+    BackgroundMusic,
+    BattleMusic,
     Fx,
     Ambience,
 }
@@ -39,14 +40,30 @@ impl CollectionKind {
     pub fn loop_playback(&self) -> bool {
         match self {
             CollectionKind::Drops | CollectionKind::Fx => false,
-            CollectionKind::Music | CollectionKind::Ambience => true,
+            CollectionKind::BackgroundMusic
+            | CollectionKind::Ambience
+            | CollectionKind::BattleMusic => true,
         }
     }
 
     pub fn is_exclusive(&self) -> bool {
         match self {
-            CollectionKind::Drops | CollectionKind::Music => true,
+            CollectionKind::Drops
+            | CollectionKind::BackgroundMusic
+            | CollectionKind::BattleMusic => true,
             CollectionKind::Fx | CollectionKind::Ambience => false,
+        }
+    }
+
+    // Audio of higher priority will automatically pause anything of
+    // lower priority as long as it's playing. None means it doesn't
+    // participate in the priority system.
+    pub fn priority(&self) -> Option<i8> {
+        match self {
+            CollectionKind::BackgroundMusic => Some(0),
+            CollectionKind::BattleMusic => Some(1),
+            CollectionKind::Drops => Some(2),
+            CollectionKind::Fx | CollectionKind::Ambience => None,
         }
     }
 }

@@ -11,8 +11,12 @@ use kira::{
     tween::Tween,
     CommandError,
 };
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{cmp::max, collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use thiserror::Error;
+use tokio::sync::{
+    broadcast::{error::SendError, Sender},
+    Mutex,
+};
 
 use crate::model::CollectionKind;
 
@@ -28,6 +32,50 @@ struct PlayingSound {
     kind: CollectionKind,
 }
 
+pub async fn poll_events(
+    player_mutex: Arc<Mutex<Player>>,
+    sender: Sender<PlayerEvent>,
+) -> Result<(), SendError<PlayerEvent>> {
+    loop {
+        let events = {
+            let mut player = player_mutex.lock().await;
+            player.poll_events()
+        };
+
+        for event in events.into_iter() {
+            sender.send(event)?;
+        }
+
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PlayerEvent {
+    Started {
+        coll_id: u64,
+        clip_id: u64,
+        duration: f64,
+    },
+    Stopped {
+        coll_id: u64,
+        clip_id: u64,
+    },
+}
+
+#[derive(Copy, Hash, Eq, PartialEq, Clone, Debug)]
+struct ClipId {
+    coll_id: u64,
+    clip_id: u64,
+}
+
+fn pause_tween() -> Tween {
+    Tween {
+        duration: Duration::from_millis(500),
+        ..Default::default()
+    }
+}
+
 impl Player {
     pub fn new() -> Result<Player, PlayerError> {
         let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
@@ -41,20 +89,72 @@ impl Player {
         Ok(player)
     }
 
-    pub fn poll_events(&mut self) -> Vec<PlayerEvent> {
+    fn clips_to_play_and_pause(&self) -> (Vec<ClipId>, Vec<ClipId>) {
+        let highest_playing = self
+            .playing
+            .iter()
+            .filter(|(_id, ps)| {
+                ps.handle.state() == PlaybackState::Playing && ps.kind.priority().is_some()
+            })
+            .max_by_key(|(_id, ps)| ps.kind.priority().unwrap());
+
+        let highest_paused = self
+            .playing
+            .iter()
+            .filter(|(_id, ps)| {
+                ps.handle.state() == PlaybackState::Paused && ps.kind.priority().is_some()
+            })
+            .max_by_key(|(_id, ps)| ps.kind.priority().unwrap());
+
+        match (highest_playing, highest_paused) {
+            (None, None) | (Some(_), None) => (vec![], vec![]),
+            (None, Some((paused_clip_id, _))) => (vec![*paused_clip_id], vec![]),
+            (Some((playing_clip_id, playing_sound)), Some((paused_clip_id, paused_sound))) => {
+                if paused_sound.kind.priority() > playing_sound.kind.priority() {
+                    (vec![*paused_clip_id], vec![*playing_clip_id])
+                } else {
+                    (vec![], vec![])
+                }
+            }
+        }
+    }
+
+    fn poll_events(&mut self) -> Vec<PlayerEvent> {
         let mut to_remove = vec![];
+
+        let (to_play, to_pause) = self.clips_to_play_and_pause();
+        for id in to_play.iter() {
+            self.playing
+                .get_mut(id)
+                .unwrap()
+                .handle
+                .resume(pause_tween())
+                .unwrap();
+        }
+
+        for id in to_pause.iter() {
+            self.playing
+                .get_mut(id)
+                .unwrap()
+                .handle
+                .pause(pause_tween())
+                .unwrap();
+        }
+
         for (id, playing_sound) in self.playing.iter_mut() {
-            if playing_sound.handle.state() == PlaybackState::Stopped {
-                if playing_sound.kind.loop_playback() {
+            match playing_sound.handle.state() {
+                PlaybackState::Stopped if playing_sound.kind.loop_playback() => {
                     playing_sound.handle =
                         self.manager.play(playing_sound.sound_data.clone()).unwrap();
-                } else {
+                }
+                PlaybackState::Stopped => {
                     self.pending_events.push(PlayerEvent::Stopped {
                         coll_id: id.coll_id,
                         clip_id: id.clip_id,
                     });
                     to_remove.push((*id).clone());
                 }
+                _ => (),
             }
         }
 
@@ -66,27 +166,7 @@ impl Player {
         std::mem::swap(&mut res, &mut self.pending_events);
         res
     }
-}
 
-pub enum PlayerEvent {
-    Started {
-        coll_id: u64,
-        clip_id: u64,
-        duration: f64,
-    },
-    Stopped {
-        coll_id: u64,
-        clip_id: u64,
-    },
-}
-
-#[derive(Hash, Eq, PartialEq, Clone)]
-struct ClipId {
-    coll_id: u64,
-    clip_id: u64,
-}
-
-impl Player {
     pub fn play_clip(
         &mut self,
         coll_id: u64,
@@ -96,6 +176,17 @@ impl Player {
     ) -> Result<(), PlayerError> {
         if kind.is_exclusive() {
             self.stop_where(|_, playing_sound| playing_sound.kind == kind)?;
+        }
+
+        if let Some(priority) = kind.priority() {
+            // pause any lower priority tracks
+            for (_id, playing_sound) in self.playing.iter_mut() {
+                if let Some(other_priority) = playing_sound.kind.priority() {
+                    if other_priority < priority {
+                        playing_sound.handle.pause(pause_tween())?;
+                    }
+                }
+            }
         }
 
         let sound_data = StaticSoundData::from_file(path, StaticSoundSettings::default())?;
@@ -143,7 +234,9 @@ impl Player {
             playing_sound.handle.stop(Tween {
                 duration: match playing_sound.kind {
                     CollectionKind::Fx | CollectionKind::Drops => Duration::from_millis(200),
-                    CollectionKind::Music | CollectionKind::Ambience => Duration::from_millis(1000),
+                    CollectionKind::BackgroundMusic
+                    | CollectionKind::Ambience
+                    | CollectionKind::BattleMusic => Duration::from_millis(1000),
                 },
                 ..Default::default()
             })?;
