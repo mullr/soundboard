@@ -16,10 +16,7 @@ function e(tag, ...args) {
 
 
 class App extends Component {
-    constructor() {
-        super();
-        this.state = { collections: [], playing: [] };
-    }
+    state = { collections: [], playing: {} };
 
     componentDidMount() {
         fetch('/collection')
@@ -27,6 +24,18 @@ class App extends Component {
             .then((data) => {
                 this.setState({ collections: data, playing: this.state.playing });
             });
+
+        const event_source = new EventSource("/events");
+        event_source.onmessage = (event) => {
+            let data = JSON.parse(event.data);
+            data.forEach(event => {
+                if (event.Started) {
+                    this.playback_started(event.Started.coll_id, event.Started.clip_id, event.Started.duration);
+                } else if (event.Stopped) {
+                    this.playback_stopped(event.Stopped.coll_id, event.Stopped.clip_id);
+                }
+            })
+        };
     }
     
     render() {
@@ -42,19 +51,37 @@ class App extends Component {
                                  el('hr'),
                                  h(Collection, { id: coll.id,
                                                  name: coll.name,
-                                                 clips: coll.clips })))));
+                                                 clips: coll.clips,
+                                                 playing: this.state.playing[coll.id] || {} })))));
     }
 
     stop_all() {
         stop_all_request()
     }
+
+    playback_started(coll_id, clip_id, duration) {
+        let state = this.state;
+        if (!state.playing[coll_id]) {
+            state.playing[coll_id] = {};
+        }
+        state.playing[coll_id][clip_id] = true;
+        this.setState(state);
+        console.log(this.state.playing);
+    }
+
+    playback_stopped(coll_id, clip_id) {
+        let state = this.state;
+        if (state.playing[coll_id]) {
+            state.playing[coll_id][clip_id] = false;
+        }
+
+        this.setState(state);
+        console.log(this.state.playing);
+    }
 }
 
 class Collection extends Component {
-    constructor() {
-        super();
-        this.props = { id: null, name: "", clips: []};
-    }
+    props = { id: null, name: "", clips: [], playing: {}};
 
     render() {
         let chunks = [];
@@ -72,7 +99,8 @@ class Collection extends Component {
                           e('div.col-md-4', {'class': 'col-md-4'}, 
                             h(Clip, { coll_id: this.props.id,
                                       id: clip.id,
-                                      name: clip.name }))))));
+                                      name: clip.name,
+                                      playing: this.props.playing[clip.id]?true:false}))))));
     }
 
     play_random() {
@@ -82,30 +110,37 @@ class Collection extends Component {
 }
 
 class Clip extends Component {
-    constructor() {
-        super();
-        this.props = { coll_id: null, id: null, name: "" };
-        this.state  = { playing: true };
-    }
+    props = { coll_id: null, id: null, name: "", playing: false };
 
     render() {
         return el('div.card', { id: `clip-${this.props.id}` },
                   e('div.card-body',
                     el('a', { href: '#', onClick: () => this.play() },
                        this.props.name ),
-                    this.props.playing ? e('span', ' ▶') : null
+
+                    e('span', ' '),
+                    this.props.playing ? el('a', { href: '#', onClick: () => this.stop() }, 'X') : null
                    ));
     }
 
     play() {
         play_request(this.props.coll_id, this.props.id)
     }
+
+    stop() {
+        stop_request(this.props.coll_id, this.props.id)
+    }
+
 }
 
 render(h(App), document.body);
 
 function play_request(coll_id, clip_id) {
     fetch(`/collection/${coll_id}/clip/${clip_id}/play`, { method: 'POST' });
+}
+
+function stop_request(coll_id, clip_id) {
+    fetch(`/collection/${coll_id}/clip/${clip_id}/stop`, { method: 'POST' });
 }
 
 function stop_all_request() {

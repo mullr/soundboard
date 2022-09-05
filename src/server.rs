@@ -1,16 +1,18 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     extract::Path,
     http::StatusCode,
+    response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
-    Extension, Router, Json,
+    Extension, Json, Router,
 };
 use axum_static_macro::static_file;
+use futures::stream::Stream;
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
-use crate::{model::Library, player::Player, api};
+use crate::{api, model::Library, player::Player};
 
 pub async fn run_server(
     address: SocketAddr,
@@ -29,22 +31,21 @@ pub async fn run_server(
         .route("/collection/:coll_id/clip/:clip_id/play", post(play_clip))
         .route("/collection/:coll_id/clip/:clip_id/stop", post(stop_clip))
         .route("/stop_all", post(stop_all))
+        .route("/events", get(events))
         .layer(Extension(library))
         .layer(Extension(player));
 
     info!("Running http server on http://{address}");
-
 
     Ok(axum::Server::bind(&address)
         .serve(app.into_make_service())
         .await?)
 }
 
-async fn collections(Extension(library): Extension<Arc<Library>>) -> Json<Vec<api::Collection>>{
+async fn collections(Extension(library): Extension<Arc<Library>>) -> Json<Vec<api::Collection>> {
     let api_lib: api::Library = (*library).clone().into();
     Json(api_lib.collections)
 }
-
 
 async fn play_clip(
     Path((coll_id, clip_id)): Path<(u64, u64)>,
@@ -66,8 +67,20 @@ async fn play_clip(
     Ok("Playing".to_string())
 }
 
-async fn stop_clip(Path((coll_id, clip_id)): Path<(u64, u64)>) {
-    warn!("Stop clip {coll_id}/{clip_id} UNIMPLEMENTED")
+async fn stop_clip(
+    Path((coll_id, clip_id)): Path<(u64, u64)>,
+    Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
+) -> Result<String, StatusCode> {
+    info!("Stop clip {coll_id}/{clip_id}");
+
+    let mut player = player_mutex.lock().await;
+
+    player.stop_clip(coll_id, clip_id).map_err(|e| {
+        error!(err = %&e as &dyn std::error::Error, "Error stopping clip");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok("Stopped".to_string())
 }
 
 async fn stop_all(
@@ -81,4 +94,28 @@ async fn stop_all(
     })?;
 
     Ok("Stopped".to_string())
+}
+
+async fn events(
+    Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
+) -> Sse<impl Stream<Item = Result<Event, serde_json::error::Error>>> {
+    use async_stream::stream;
+
+    let s = stream! {
+        loop {
+            let events = {
+                let mut player = player_mutex.lock().await;
+                player.poll_events()
+            };
+
+            if !events.is_empty() {
+                let api_events = events.into_iter().map(|ev| api::PlayerEvent::from(ev)).collect::<Vec<_>>();
+                yield Event::default().json_data(api_events);
+            }
+
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    };
+
+    Sse::new(s).keep_alive(KeepAlive::default())
 }

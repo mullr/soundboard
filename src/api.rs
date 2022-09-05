@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::model;
+use crate::{model, player};
 
 #[derive(Serialize)]
 pub struct Library {
@@ -43,6 +43,39 @@ impl From<model::Clip> for Clip {
         Clip {
             id: m.id.to_string(),
             name: m.name,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub enum PlayerEvent {
+    Started {
+        coll_id: String,
+        clip_id: String,
+        duration: f64,
+    },
+    Stopped {
+        coll_id: String,
+        clip_id: String,
+    },
+}
+
+impl From<player::PlayerEvent> for PlayerEvent {
+    fn from(m: player::PlayerEvent) -> Self {
+        match m {
+            player::PlayerEvent::Started {
+                coll_id,
+                clip_id,
+                duration,
+            } => PlayerEvent::Started {
+                coll_id: coll_id.to_string(),
+                clip_id: clip_id.to_string(),
+                duration,
+            },
+            player::PlayerEvent::Stopped { coll_id, clip_id } => PlayerEvent::Stopped {
+                coll_id: coll_id.to_string(),
+                clip_id: clip_id.to_string(),
+            },
         }
     }
 }
