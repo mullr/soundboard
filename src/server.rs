@@ -1,26 +1,31 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use askama::Template;
 use axum::{
     extract::Path,
     http::StatusCode,
-    response::{Html, IntoResponse},
     routing::{get, post},
-    Extension, Router,
+    Extension, Router, Json,
 };
+use axum_static_macro::static_file;
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
-use crate::{model::Library, player::Player};
+use crate::{model::Library, player::Player, api};
 
 pub async fn run_server(
     address: SocketAddr,
     library: Arc<Library>,
     player: Arc<Mutex<Player>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    static_file!(index_html, "public/index.html", "text/html");
+    static_file!(index_js, "public/index.js", "application/javascript");
+
     // build our application with a single route
     let app = Router::new()
-        .route("/", get(root))
+        // .route("/", get(root))
+        .route("/", get(index_html))
+        .route("/index.js", get(index_js))
+        .route("/collection", get(collections))
         .route("/collection/:coll_id/clip/:clip_id/play", post(play_clip))
         .route("/collection/:coll_id/clip/:clip_id/stop", post(stop_clip))
         .route("/stop_all", post(stop_all))
@@ -29,38 +34,17 @@ pub async fn run_server(
 
     info!("Running http server on http://{address}");
 
+
     Ok(axum::Server::bind(&address)
         .serve(app.into_make_service())
         .await?)
 }
 
-struct HtmlTemplate<T>(T);
-impl<T> IntoResponse for HtmlTemplate<T>
-where
-    T: Template,
-{
-    fn into_response(self) -> axum::response::Response {
-        match self.0.render() {
-            Ok(html) => Html(html).into_response(),
-            Err(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to render template. {}", err),
-            )
-                .into_response(),
-        }
-    }
+async fn collections(Extension(library): Extension<Arc<Library>>) -> Json<Vec<api::Collection>>{
+    let api_lib: api::Library = (*library).clone().into();
+    Json(api_lib.collections)
 }
 
-#[derive(Template)]
-#[template(path = "index.html")]
-struct RootTemplate {
-    library: Arc<Library>,
-}
-
-async fn root(Extension(library): Extension<Arc<Library>>) -> impl IntoResponse {
-    let template = RootTemplate { library };
-    HtmlTemplate(template)
-}
 
 async fn play_clip(
     Path((coll_id, clip_id)): Path<(u64, u64)>,
