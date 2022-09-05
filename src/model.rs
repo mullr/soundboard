@@ -28,7 +28,7 @@ pub struct Collection {
     pub kind: CollectionKind,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Copy, Clone, Debug, serde::Serialize, Eq, PartialEq)]
 pub enum CollectionKind {
     Drops,
     Music,
@@ -40,6 +40,13 @@ impl CollectionKind {
         match self {
             CollectionKind::Drops | CollectionKind::Fx => false,
             CollectionKind::Music | CollectionKind::Ambience => true,
+        }
+    }
+
+    pub fn is_exclusive(&self) -> bool {
+        match self {
+            CollectionKind::Drops | CollectionKind::Music => true,
+            CollectionKind::Fx | CollectionKind::Ambience => false,
         }
     }
 }
@@ -57,6 +64,8 @@ impl Collection {
                 clips.push(Clip::from_file(entry.path())?);
             }
         }
+
+        clips.sort_by_key(|clip| clip.name.clone());
 
         let mut hasher = DefaultHasher::new();
         path.hash(&mut hasher);

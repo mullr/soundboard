@@ -48,6 +48,7 @@ pub async fn run_server(
         .route("/", get(index_html))
         .route("/index.js", get(index_js))
         .route("/collection", get(collections))
+        .route("/collection/:coll_id/stop", post(stop_coll))
         .route("/collection/:coll_id/clip/:clip_id/play", post(play_clip))
         .route("/collection/:coll_id/clip/:clip_id/stop", post(stop_clip))
         .route("/stop_all", post(stop_all))
@@ -83,12 +84,7 @@ async fn play_clip(
     let clip = coll.clip(clip_id).ok_or(StatusCode::NOT_FOUND)?;
 
     player
-        .play_clip(
-            coll_id,
-            clip_id,
-            clip.path.to_owned(),
-            coll.kind.loop_playback(),
-        )
+        .play_clip(coll_id, clip_id, clip.path.to_owned(), coll.kind)
         .map_err(|e| {
             error!(err = %&e as &dyn std::error::Error, "Error playing clip");
             StatusCode::INTERNAL_SERVER_ERROR
@@ -102,11 +98,25 @@ async fn stop_clip(
     Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
 ) -> Result<String, StatusCode> {
     info!("Stop clip {coll_id}/{clip_id}");
-
     let mut player = player_mutex.lock().await;
 
     player.stop_clip(coll_id, clip_id).map_err(|e| {
         error!(err = %&e as &dyn std::error::Error, "Error stopping clip");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok("Stopped".to_string())
+}
+
+async fn stop_coll(
+    Path(coll_id): Path<u64>,
+    Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
+) -> Result<String, StatusCode> {
+    info!("Stop collection {coll_id}");
+    let mut player = player_mutex.lock().await;
+
+    player.stop_coll(coll_id).map_err(|e| {
+        error!(err = %&e as &dyn std::error::Error, "Error stopping collection");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
