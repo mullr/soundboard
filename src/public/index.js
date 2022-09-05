@@ -1,4 +1,6 @@
-import { h, Component, Fragment, render } from 'https://unpkg.com/preact?module';
+import '/preact/debug.mjs';
+import { h, Component, Fragment, render, createContext } from '/preact/preact.mjs';
+import { useState, useEffect, useContext } from '/preact/hooks.mjs';
 
 // like h(), but with tag.class.class syntax
 function el(tag, props, ...args) {
@@ -14,123 +16,110 @@ function e(tag, ...args) {
     return el(tag, null, args);
 }
 
+class EventBus {
+    constructor() { this.bus = {}; }
+    off(id) { delete this.bus[id]; }
+    on(id, callback) { this.bus[id] = callback; }
+    emit(id, ...params) { if(this.bus[id]) { this.bus[id](...params); } }
+}
 
-class App extends Component {
-    state = { collections: [], playing: {} };
+const Bus = createContext(new EventBus());
 
-    componentDidMount() {
+function App(props) {
+    const [collections, setCollections] = useState([]);
+    const bus = useContext(Bus);
+
+    const on_backend_message = (sse_event) => {
+        let data = JSON.parse(sse_event.data);
+        data.forEach(event => {
+            if (event.Started !== undefined) {
+                bus.emit(`${event.Started.coll_id}/${event.Started.clip_id}`, {event: "Started", duration: event.Started.duration});
+            } else if (event.Stopped !== undefined) {
+                bus.emit(`${event.Stopped.coll_id}/${event.Stopped.clip_id}`, {event: "Stopped"});
+            }
+        })
+    };
+
+    // init effects
+    useEffect(() => {
         fetch('/collection')
             .then((response) => response.json())
-            .then((data) => {
-                this.setState({ collections: data, playing: this.state.playing });
-            });
+            .then((data) => setCollections(data));
 
         const event_source = new EventSource("/events");
-        event_source.onmessage = (event) => {
-            let data = JSON.parse(event.data);
-            data.forEach(event => {
-                if (event.Started) {
-                    this.playback_started(event.Started.coll_id, event.Started.clip_id, event.Started.duration);
-                } else if (event.Stopped) {
-                    this.playback_stopped(event.Stopped.coll_id, event.Stopped.clip_id);
-                }
-            })
-        };
-    }
-    
-    render() {
-        return e('div.container', 
-                 e('header',
-                   e('span.fs-1.me-3', "The Soundboard"),
-                   e('big', e('b', el('a', { href: '#',
-                                             onClick: () => this.stop_all() },
-                                      "STOP ALL")))),
-                 e('main', 
-                   this.state.collections.map(
-                       coll => h(Fragment, null,
-                                 el('hr'),
-                                 h(Collection, { id: coll.id,
-                                                 name: coll.name,
-                                                 clips: coll.clips,
-                                                 playing: this.state.playing[coll.id] || {} })))));
-    }
+        event_source.onmessage = on_backend_message;
 
-    stop_all() {
-        stop_all_request()
-    }
+        return () => { event_source.close() };
+    }, []);
 
-    playback_started(coll_id, clip_id, duration) {
-        let state = this.state;
-        if (!state.playing[coll_id]) {
-            state.playing[coll_id] = {};
-        }
-        state.playing[coll_id][clip_id] = true;
-        this.setState(state);
-        console.log(this.state.playing);
-    }
-
-    playback_stopped(coll_id, clip_id) {
-        let state = this.state;
-        if (state.playing[coll_id]) {
-            state.playing[coll_id][clip_id] = false;
-        }
-
-        this.setState(state);
-        console.log(this.state.playing);
-    }
+    return e('div.container',
+             e('header',
+               e('span.fs-1.me-3', "The Soundboard"),
+               e('big', e('b', el('a', { href: '#', onClick: stop_all_request },
+                                  "STOP ALL")))),
+             e('main',
+               collections.map(
+                   coll => h(Fragment, null,
+                             el('hr'),
+                             h(Collection, { id: coll.id,
+                                             name: coll.name,
+                                             clips: coll.clips })))));
 }
 
-class Collection extends Component {
-    props = { id: null, name: "", clips: [], playing: {}};
-
-    render() {
-        let chunks = [];
-        for (let i = 0; i < this.props.clips.length; i += 3) {
-            chunks.push(this.props.clips.slice(i, i + 3));
-        }
-
-        return el('div.d-grid.gap-3', { id: `coll-${this.props.id}` },
-                  e('div.row',
-                    e('div.col',
-                      e('span.fs-2.me-3', this.props.name),
-                      el('a', { href: "#", onClick: () => this.play_random() }, "Random"))),
-                  chunks.map(chunk =>
-                      e('div.row', chunk.map(clip =>
-                          e('div.col-md-4', {'class': 'col-md-4'}, 
-                            h(Clip, { coll_id: this.props.id,
-                                      id: clip.id,
-                                      name: clip.name,
-                                      playing: this.props.playing[clip.id]?true:false}))))));
+function Collection(props) {
+    let chunks = [];
+    for (let i = 0; i < props.clips.length; i += 3) {
+        chunks.push(props.clips.slice(i, i + 3));
     }
 
-    play_random() {
-        let random_clip = this.props.clips[Math.floor(Math.random()*this.props.clips.length)];
-        play_request(this.props.id, random_clip.id);
-    }
+    let play_random = () => {
+        let random_clip = props.clips[Math.floor(Math.random()*props.clips.length)];
+        play_request(props.id, random_clip.id);
+    };
+
+    return el('div.d-grid.gap-3', { key: `coll-${props.id}` },
+              e('div.row',
+                e('div.col',
+                  e('span.fs-2.me-3', props.name),
+                  el('a', { href: "#", onClick: play_random }, "Random"))),
+              chunks.map(chunk =>
+                  e('div.row', chunk.map(clip =>
+                      e('div.col-md-4',
+                        h(Clip, { coll_id: props.id,
+                                  id: clip.id,
+                                  name: clip.name}))))));
+
 }
 
-class Clip extends Component {
-    props = { coll_id: null, id: null, name: "", playing: false };
+function Clip(props) {
+    const play = () => play_request(props.coll_id, props.id);
+    const stop = () => stop_request(props.coll_id, props.id);
+    const [playing, setPlaying] = useState(false);
 
-    render() {
-        return el('div.card', { id: `clip-${this.props.id}` },
-                  e('div.card-body',
-                    el('a', { href: '#', onClick: () => this.play() },
-                       this.props.name ),
+    const on_message = (message) => {
+        switch (message.event) {
+        case "Started":
+            setPlaying(true);
+            break;
+        case "Stopped":
+            setPlaying(false);
+            break;
+        }
+    };
 
-                    e('span', ' '),
-                    this.props.playing ? el('a', { href: '#', onClick: () => this.stop() }, 'X') : null
-                   ));
-    }
+    const bus = useContext(Bus);
+    useEffect(() => {
+        let key = `${props.coll_id}/${props.id}`;
+        bus.on(key, on_message);
+        return () => bus.off(key);
+    }, []);
 
-    play() {
-        play_request(this.props.coll_id, this.props.id)
-    }
-
-    stop() {
-        stop_request(this.props.coll_id, this.props.id)
-    }
-
+    return el('div.card', { key: `clip-${props.id}` },
+              e('div.card-body',
+                el('a', { href: '#', onClick: () => play() },
+                   props.name ),
+                e('span', ' '),
+                playing ? el('a', { href: '#', onClick: stop }, 'X') : null));
 }
 
 render(h(App), document.body);

@@ -1,7 +1,7 @@
+mod api;
 mod model;
 mod player;
 mod server;
-mod api;
 
 use clap::Parser;
 use model::{Collection, Library};

@@ -21,6 +21,26 @@ pub async fn run_server(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     static_file!(index_html, "public/index.html", "text/html");
     static_file!(index_js, "public/index.js", "application/javascript");
+    static_file!(
+        preact_preact_mjs,
+        "public/preact/dist/preact.mjs",
+        "application/javascript"
+    );
+    static_file!(
+        preact_hooks_mjs,
+        "public/preact/hooks/dist/hooks.mjs",
+        "application/javascript"
+    );
+    static_file!(
+        preact_debug_mjs,
+        "public/preact/debug/dist/debug.mjs",
+        "application/javascript"
+    );
+    static_file!(
+        preact_devtools_mjs,
+        "public/preact/devtools/dist/devtools.mjs",
+        "application/javascript"
+    );
 
     // build our application with a single route
     let app = Router::new()
@@ -32,6 +52,10 @@ pub async fn run_server(
         .route("/collection/:coll_id/clip/:clip_id/stop", post(stop_clip))
         .route("/stop_all", post(stop_all))
         .route("/events", get(events))
+        .route("/preact/preact.mjs", get(preact_preact_mjs))
+        .route("/preact/hooks.mjs", get(preact_hooks_mjs))
+        .route("/preact/debug.mjs", get(preact_debug_mjs))
+        .route("/preact/devtools.mjs", get(preact_devtools_mjs))
         .layer(Extension(library))
         .layer(Extension(player));
 
