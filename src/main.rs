@@ -54,7 +54,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let player = Player::new()?;
     let player = Arc::new(Mutex::new(player));
-    let (player_event_tx, player_event_rx) = tokio::sync::broadcast::channel::<PlayerEvent>(16);
+    let (player_event_tx, _) = tokio::sync::broadcast::channel::<PlayerEvent>(16);
     let player_for_poller = player.clone();
     let tx_for_poller = player_event_tx.clone();
     tokio::spawn(async move {

@@ -142,8 +142,7 @@ dependencies = [
 [[package]]
 name = "axum_static_macro"
 version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14de1558b113a905ee99e569affef5a4cbb35f65685493991d1558e7d491adb0"
+source = "git+https://github.com/mullr/axum_static_macro?branch=fix-release-build#54e0ce40872ad5f7c11dac073a9d732529b1e015"
 
 [[package]]
 name = "bindgen"
@@ -1235,7 +1234,6 @@ name = "soundboard"
 version = "0.1.0"
 dependencies = [
  "async-stream",
- "async-trait",
  "axum",
  "axum_static_macro",
  "clap",

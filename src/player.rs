@@ -11,7 +11,7 @@ use kira::{
     tween::Tween,
     CommandError,
 };
-use std::{cmp::max, collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::{
     broadcast::{error::SendError, Sender},

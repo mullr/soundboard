@@ -5,9 +5,8 @@ edition = "2021"
 
 [dependencies]
 async-stream = "0.3.3"
-async-trait = "0.1.57"
 axum = {version = "0.5.15", features = ["json"]}
-axum_static_macro = "1"
+axum_static_macro = { git = "https://github.com/mullr/axum_static_macro", branch = "fix-release-build" }
 clap = { version = "3.2.20", features = ["derive"] }
 cpal = "0.13.5"
 futures = "0.3.24"

@@ -1,20 +1,15 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 
-use async_trait::async_trait;
 use axum::{
-    extract::{FromRequest, Path, RequestParts},
+    extract::Path,
     http::StatusCode,
     response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
     Extension, Json, Router,
 };
 use axum_static_macro::static_file;
-use futures::{stream::Stream, StreamExt, TryStreamExt};
-use tokio::sync::{
-    broadcast::{Receiver, Sender},
-    Mutex,
-};
-use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use futures::{stream::Stream, StreamExt};
+use tokio::sync::{broadcast::Sender, Mutex};
 use tracing::{error, info};
 
 use crate::{
