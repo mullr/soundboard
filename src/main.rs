@@ -26,7 +26,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let library = Arc::new(library);
 
-    let (player, _stream) = Player::new()?;
+    let player = Player::new()?;
     let player = Arc::new(Mutex::new(player));
 
     server::run_server(args.address, library, player).await

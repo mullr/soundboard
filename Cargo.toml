@@ -7,9 +7,13 @@ edition = "2021"
 askama = "0.11.1"
 axum = "0.5.15"
 clap = { version = "3.2.20", features = ["derive"] }
+cpal = "0.14"
 hyper = "0.14.20"
-rodio = "0.15.0"
+kira = "0.7"
 thiserror = "1.0.34"
 tokio = { version = "1.21.0", features = ["full"] } # TODO defeature
 tracing = "0.1"
 tracing-subscriber = "0.3"
+
+[profile.dev.package.symphonia-bundle-mp3]
+opt-level = 3

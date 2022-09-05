@@ -1,21 +1,34 @@
-use rodio::{OutputStream, OutputStreamHandle};
-use std::{collections::HashMap, path::PathBuf};
+use kira::{
+    manager::{
+        backend::{cpal::CpalBackend, Backend},
+        error::PlaySoundError,
+        AudioManager, AudioManagerSettings,
+    },
+    sound::{
+        static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
+        SoundData,
+    },
+    tween::Tween,
+    CommandError,
+};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 use thiserror::Error;
 
 pub struct Player {
-    playing: HashMap<ClipId, rodio::Sink>,
-    stream_handle: OutputStreamHandle,
+    manager: AudioManager,
+    playing: HashMap<ClipId, StaticSoundHandle>,
 }
 
 impl Player {
-    pub fn new() -> Result<(Player, OutputStream), PlayerError> {
-        let (stream, stream_handle) = OutputStream::try_default()?;
+    pub fn new() -> Result<Player, PlayerError> {
+        let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
+            .map_err(PlayerError::CpalError)?;
         let player = Player {
+            manager,
             playing: Default::default(),
-            stream_handle,
         };
 
-        Ok((player, stream))
+        Ok(player)
     }
 }
 
@@ -32,18 +45,24 @@ impl Player {
         clip_id: u64,
         path: PathBuf,
     ) -> Result<(), PlayerError> {
-        use std::fs::File;
-        use std::io::BufReader;
-
-        let file = BufReader::new(File::open(path)?);
-        let sink = self.stream_handle.play_once(file)?;
-        self.playing.insert(ClipId { coll_id, clip_id }, sink);
+        let sound_data = StaticSoundData::from_file(path, StaticSoundSettings::default())?;
+        let handle = self.manager.play(sound_data)?;
+        self.playing.insert(ClipId { coll_id, clip_id }, handle);
 
         Ok(())
     }
 
-    pub fn stop_all(&mut self) {
+    pub fn stop_all(&mut self) -> Result<(), PlayerError> {
+        for (_, handle) in self.playing.iter_mut() {
+            handle.stop(Tween {
+                duration: Duration::from_millis(200),
+                ..Default::default()
+            })?;
+        }
+
         self.playing.clear();
+
+        Ok(())
     }
 }
 
@@ -53,8 +72,14 @@ pub enum PlayerError {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    PlayError(#[from] rodio::PlayError),
+    FromFileError(#[from] kira::sound::FromFileError),
 
     #[error(transparent)]
-    StreamError(#[from] rodio::StreamError),
+    CpalError(<CpalBackend as Backend>::Error),
+
+    #[error(transparent)]
+    PlaySound(#[from] PlaySoundError<<StaticSoundData as SoundData>::Error>),
+
+    #[error(transparent)]
+    Command(#[from] CommandError),
 }

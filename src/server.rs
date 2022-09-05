@@ -86,8 +86,15 @@ async fn stop_clip(Path((coll_id, clip_id)): Path<(u64, u64)>) {
     warn!("Stop clip {coll_id}/{clip_id} UNIMPLEMENTED")
 }
 
-async fn stop_all(Extension(player_mutex): Extension<Arc<Mutex<Player>>>) {
+async fn stop_all(
+    Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
+) -> Result<String, StatusCode> {
     info!("Stop all");
     let mut player = player_mutex.lock().await;
-    player.stop_all();
+    player.stop_all().map_err(|e| {
+        error!(err = %&e as &dyn std::error::Error, "Error stopping clips");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok("Stopped".to_string())
 }
