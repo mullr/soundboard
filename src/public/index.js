@@ -40,7 +40,7 @@ function App(props) {
     const on_backend_message = (sse_event) => {
         let event = JSON.parse(sse_event.data);
         if (event.Started !== undefined) {
-            bus.emit(`${event.Started.coll_id}/${event.Started.clip_id}`, {event: "Started", duration: event.Started.duration});
+            bus.emit(`${event.Started.coll_id}/${event.Started.clip_id}`, {event: "Started"});
         } else if (event.Stopped !== undefined) {
             bus.emit(`${event.Stopped.coll_id}/${event.Stopped.clip_id}`, {event: "Stopped"});
         }
@@ -50,7 +50,13 @@ function App(props) {
     useEffect(() => {
         fetch('/collection')
             .then((response) => response.json())
-            .then((data) => setCollections(data));
+            .then((data) => {
+                setCollections(data);
+                fetch('/playing')
+                    .then((response) => response.json())
+                    .then((data) => data.forEach(([coll_id, clip_id]) =>
+                        bus.emit(`${coll_id}/${clip_id}`, {event: "Started"})))
+            });
 
         const event_source = new EventSource("/events");
         event_source.onmessage = on_backend_message;

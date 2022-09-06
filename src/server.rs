@@ -53,6 +53,7 @@ pub async fn run_server(
         .route("/", get(index_html))
         .route("/index.js", get(index_js))
         .route("/collection", get(collections))
+        .route("/playing", get(playing))
         .route("/collection/:coll_id/stop", post(stop_coll))
         .route("/collection/:coll_id/clip/:clip_id/play", post(play_clip))
         .route("/collection/:coll_id/clip/:clip_id/stop", post(stop_clip))
@@ -75,7 +76,23 @@ pub async fn run_server(
 
 async fn collections(Extension(library): Extension<Arc<Library>>) -> Json<Vec<api::Collection>> {
     let api_lib: api::Library = (*library).clone().into();
+
     Json(api_lib.collections)
+}
+
+async fn playing(
+    Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
+) -> Json<Vec<(String, String)>> {
+    let playing = {
+        let player = player_mutex.lock().await;
+        player
+            .playing_clips()
+            .into_iter()
+            .map(|(coll_id, clip_id)| (coll_id.to_string(), clip_id.to_string()))
+            .collect::<Vec<_>>()
+    };
+
+    Json(playing)
 }
 
 async fn play_clip(

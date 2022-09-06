@@ -35,11 +35,11 @@ struct PlayingSound {
 pub async fn poll_events(
     player_mutex: Arc<Mutex<Player>>,
     sender: Sender<PlayerEvent>,
-) -> Result<(), SendError<PlayerEvent>> {
+) -> Result<(), PlayerError> {
     loop {
         let events = {
             let mut player = player_mutex.lock().await;
-            player.poll_events()
+            player.poll_events()?
         };
 
         for event in events.into_iter() {
@@ -96,6 +96,7 @@ impl Player {
             .filter(|(_id, ps)| {
                 ps.handle.state() == PlaybackState::Playing && ps.kind.priority().is_some()
             })
+            // SAFETY: this unwrap is okay because we just checked it with is_some()
             .max_by_key(|(_id, ps)| ps.kind.priority().unwrap());
 
         let highest_paused = self
@@ -104,6 +105,7 @@ impl Player {
             .filter(|(_id, ps)| {
                 ps.handle.state() == PlaybackState::Paused && ps.kind.priority().is_some()
             })
+            // SAFETY: this unwrap is okay because we just checked it with is_some()
             .max_by_key(|(_id, ps)| ps.kind.priority().unwrap());
 
         match (highest_playing, highest_paused) {
@@ -119,33 +121,25 @@ impl Player {
         }
     }
 
-    fn poll_events(&mut self) -> Vec<PlayerEvent> {
-        let mut to_remove = vec![];
-
+    fn poll_events(&mut self) -> Result<Vec<PlayerEvent>, PlayerError> {
         let (to_play, to_pause) = self.clips_to_play_and_pause();
         for id in to_play.iter() {
-            self.playing
-                .get_mut(id)
-                .unwrap()
-                .handle
-                .resume(pause_tween())
-                .unwrap();
+            if let Some(playing_sound) = self.playing.get_mut(id) {
+                playing_sound.handle.resume(pause_tween())?
+            }
         }
 
         for id in to_pause.iter() {
-            self.playing
-                .get_mut(id)
-                .unwrap()
-                .handle
-                .pause(pause_tween())
-                .unwrap();
+            if let Some(playing_sound) = self.playing.get_mut(id) {
+                playing_sound.handle.pause(pause_tween())?
+            }
         }
 
+        let mut to_remove = vec![];
         for (id, playing_sound) in self.playing.iter_mut() {
             match playing_sound.handle.state() {
                 PlaybackState::Stopped if playing_sound.kind.loop_playback() => {
-                    playing_sound.handle =
-                        self.manager.play(playing_sound.sound_data.clone()).unwrap();
+                    playing_sound.handle = self.manager.play(playing_sound.sound_data.clone())?;
                 }
                 PlaybackState::Stopped => {
                     self.pending_events.push(PlayerEvent::Stopped {
@@ -164,7 +158,14 @@ impl Player {
 
         let mut res = vec![];
         std::mem::swap(&mut res, &mut self.pending_events);
-        res
+        Ok(res)
+    }
+
+    pub fn playing_clips(&self) -> Vec<(u64, u64)> {
+        self.playing
+            .keys()
+            .map(|id| (id.coll_id, id.clip_id))
+            .collect()
     }
 
     pub fn play_clip(
@@ -272,4 +273,7 @@ pub enum PlayerError {
 
     #[error(transparent)]
     Command(#[from] CommandError),
+
+    #[error(transparent)]
+    SendError(#[from] SendError<PlayerEvent>),
 }

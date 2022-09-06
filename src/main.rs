@@ -6,7 +6,7 @@ mod server;
 use clap::Parser;
 use model::{Collection, Library};
 use player::{Player, PlayerEvent};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tracing::error;
 
@@ -58,9 +58,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let player_for_poller = player.clone();
     let tx_for_poller = player_event_tx.clone();
     tokio::spawn(async move {
-        player::poll_events(player_for_poller, tx_for_poller)
-            .await
-            .unwrap()
+        loop {
+            if let Err(e) =
+                player::poll_events(player_for_poller.clone(), tx_for_poller.clone()).await
+            {
+                error!(err = &e as &dyn std::error::Error);
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
     });
 
     server::run_server(args.address, library, player, player_event_tx).await
