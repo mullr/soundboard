@@ -104,26 +104,34 @@ function Collection(props) {
                                   name: clip.name}))))));
 }
 
+const card_class_for_state = {
+    "pending": "card bg-secondary text-light",
+    "started": "card bg-success text-light",
+    "stopped": "card bg-light text-dark",
+};
+
 function Clip(props) {
     const play = (e) => {
+        setPlaying("pending");
         play_clip_request(props.coll_id, props.id);
         e.preventDefault();
     };
 
     const stop = (e) => {
+        setPlaying("pending");
         stop_clip_request(props.coll_id, props.id);
         e.preventDefault();
     };
 
-    const [playing, setPlaying] = useState(false);
+    const [playingState, setPlaying] = useState("stopped");
 
     const on_message = (message) => {
         switch (message.event) {
         case "Started":
-            setPlaying(true);
+            setPlaying("started");
             break;
         case "Stopped":
-            setPlaying(false);
+            setPlaying("stopped");
             break;
         }
     };
@@ -135,11 +143,13 @@ function Clip(props) {
         return () => bus.off(key);
     }, []);
 
-    return el('div.card', { key: `clip-${props.id}` },
+
+    return h('div', { key: `clip-${props.id}`,
+                      'class': card_class_for_state[playingState],
+                      style: 'cursor: pointer; transition: all 0.2s ease-out;',
+                      onClick: playingState !== "stopped" ? stop : play },
               e('div.card-body',
-                el('a', { href: '#', onClick: play }, props.name ),
-                e('span', ' '),
-                playing ? el('a', { href: '#', onClick: stop }, 'X') : null));
+                props.name));
 }
 
 render(h(App), document.body);
