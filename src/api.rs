@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{model, player};
 
@@ -80,4 +80,9 @@ impl From<player::PlayerEvent> for PlayerEvent {
             },
         }
     }
+}
+
+#[derive(Deserialize)]
+pub struct PlaybackParams {
+    pub gain: f64,
 }

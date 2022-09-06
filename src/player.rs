@@ -9,7 +9,7 @@ use kira::{
         SoundData,
     },
     tween::Tween,
-    CommandError,
+    CommandError, Volume,
 };
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use thiserror::Error;
@@ -253,6 +253,18 @@ impl Player {
             self.playing.remove(&id);
         }
 
+        Ok(())
+    }
+
+    pub fn set_gain(&mut self, coll_id: u64, gain: f64) -> Result<(), PlayerError> {
+        for (id, ps) in self.playing.iter_mut() {
+            if id.coll_id != coll_id {
+                continue;
+            }
+            ps.handle.set_volume(Volume::from(gain), Tween::default())?;
+        }
+
+        // TODO save for future clips
         Ok(())
     }
 }

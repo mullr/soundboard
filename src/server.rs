@@ -54,6 +54,7 @@ pub async fn run_server(
         .route("/index.js", get(index_js))
         .route("/collection", get(collections))
         .route("/playing", get(playing))
+        .route("/collection/:coll_id/playback", post(coll_playback))
         .route("/collection/:coll_id/stop", post(stop_coll))
         .route("/collection/:coll_id/clip/:clip_id/play", post(play_clip))
         .route("/collection/:coll_id/clip/:clip_id/stop", post(stop_clip))
@@ -157,6 +158,21 @@ async fn stop_all(
     })?;
 
     Ok("Stopped".to_string())
+}
+
+async fn coll_playback(
+    Path(coll_id): Path<u64>,
+    Json(body): Json<api::PlaybackParams>,
+    Extension(player_mutex): Extension<Arc<Mutex<Player>>>,
+) -> Result<String, StatusCode> {
+    info!("Set collection playback params {coll_id}");
+    let mut player = player_mutex.lock().await;
+    player.set_gain(coll_id, body.gain).map_err(|e| {
+        error!(err = %&e as &dyn std::error::Error, "Error stopping collection");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok("".to_string())
 }
 
 async fn events(

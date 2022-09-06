@@ -96,12 +96,20 @@ function Collection(props) {
         e.preventDefault();
     };
 
+    let on_gain_change = (e) => {
+        let gain = e.target.valueAsNumber;
+        coll_playback_request(props.id, gain);
+    };
+
     return el('div.d-grid.gap-3', { key: `coll-${props.id}` },
               e('div.row',
                 e('div.col',
                   e('span.fs-2.me-3', props.name),
                   e('span.badge.rounded-pill.text-bg-primary.me-3', props.kind),
-                  el('a', { href: "#", onClick: play_random }, "Play Random"))),
+                  el('a', { href: "#", onClick: play_random }, "Play Random"),
+                 )),
+              e('div.row',
+                e('div.range', el('input.form-range', { type: 'range', min: 0.0, max: 1.5, step: 0.01, onChange: on_gain_change }))),
               chunks.map(chunk =>
                   e('div.row', chunk.map(clip =>
                       e('div.col-md-4',
@@ -174,4 +182,11 @@ function stop_coll_request(coll_id, clip_id) {
 
 function stop_all_request() {
     fetch('/stop_all', { method: 'POST' });
+}
+
+function coll_playback_request(coll_id, gain) {
+    fetch(`/collection/${coll_id}/playback`,
+          { method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gain: gain }) });
 }
