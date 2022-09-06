@@ -7,7 +7,7 @@ function el(tag, props, ...args) {
     let parts = tag.split('.');
     tag = parts.shift();
     props = props || {};
-    props['class'] = (props['class'] || '') + parts.join(' ')
+    props['class'] = (props['class'] || '') + ' ' + parts.join(' ')
     return h(tag, props, args);
 }
 
@@ -90,28 +90,33 @@ function Collection(props) {
         chunks.push(props.clips.slice(i, i + 3));
     }
 
-    let play_random = (e) => {
+    const play_random = (e) => {
         let random_clip = props.clips[Math.floor(Math.random()*props.clips.length)];
         play_clip_request(props.id, random_clip.id);
         e.preventDefault();
     };
 
-    let on_gain_change = (e) => {
+    const on_gain_change = (e) => {
         let gain = e.target.valueAsNumber;
         coll_playback_request(props.id, gain);
     };
 
+    let [collapsed, setCollapsed] = useState(true);
+    const toggleCollapsed = () => {
+        setCollapsed((c) => !c);
+    };
+    
+
     return el('div.d-grid.gap-3', { key: `coll-${props.id}` },
               e('div.row',
                 e('div.col',
-                  e('span.fs-2.me-3', props.name),
+                  el('span.fs-2.me-3', { onClick: toggleCollapsed }, props.name),
                   e('span.badge.rounded-pill.text-bg-primary.me-3', props.kind),
-                  el('a', { href: "#", onClick: play_random }, "Play Random"),
-                 )),
+                  el('span', { href: "#", onClick: play_random }, "Play Random"))),
               e('div.row',
                 e('div.range', el('input.form-range', { type: 'range', min: 0.0, max: 1.5, step: 0.01, onChange: on_gain_change }))),
               chunks.map(chunk =>
-                  e('div.row', chunk.map(clip =>
+                  el('div.row', {'class': collapsed?'collapse':''}, chunk.map(clip =>
                       e('div.col-md-4',
                         h(Clip, { coll_id: props.id,
                                   id: clip.id,
