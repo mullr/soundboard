@@ -24,6 +24,7 @@ pub struct Player {
     manager: AudioManager,
     playing: HashMap<ClipId, PlayingSound>,
     pending_events: Vec<PlayerEvent>,
+    coll_gain: HashMap<u64, f64>,
 }
 
 struct PlayingSound {
@@ -84,6 +85,7 @@ impl Player {
             manager,
             playing: Default::default(),
             pending_events: Default::default(),
+            coll_gain: Default::default(),
         };
 
         Ok(player)
@@ -140,6 +142,10 @@ impl Player {
             match playing_sound.handle.state() {
                 PlaybackState::Stopped if playing_sound.kind.loop_playback() => {
                     playing_sound.handle = self.manager.play(playing_sound.sound_data.clone())?;
+                    let gain = self.coll_gain.get(&id.coll_id).unwrap_or(&1.0);
+                    playing_sound
+                        .handle
+                        .set_volume(Volume::from(*gain), Tween::default())?;
                 }
                 PlaybackState::Stopped => {
                     self.pending_events.push(PlayerEvent::Stopped {
@@ -192,7 +198,11 @@ impl Player {
 
         let sound_data = StaticSoundData::from_file(path, StaticSoundSettings::default())?;
         let duration = sound_data.duration();
-        let handle = self.manager.play(sound_data.clone())?;
+        let mut handle = self.manager.play(sound_data.clone())?;
+
+        let gain = self.coll_gain.get(&coll_id).unwrap_or(&1.0);
+        handle.set_volume(Volume::from(*gain), Tween::default())?;
+
         self.playing.insert(
             ClipId { coll_id, clip_id },
             PlayingSound {
@@ -264,7 +274,7 @@ impl Player {
             ps.handle.set_volume(Volume::from(gain), Tween::default())?;
         }
 
-        // TODO save for future clips
+        self.coll_gain.insert(coll_id, gain);
         Ok(())
     }
 }
