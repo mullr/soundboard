@@ -1,3 +1,4 @@
+use hyper::body::Buf;
 use kira::{
     manager::{
         backend::{cpal::CpalBackend, Backend},
@@ -21,16 +22,70 @@ use tokio::sync::{
 use crate::model::CollectionKind;
 
 pub struct Player {
-    manager: AudioManager,
+    manager: AudioManagerDispatch,
     playing: HashMap<ClipId, PlayingSound>,
     pending_events: Vec<PlayerEvent>,
     coll_gain: HashMap<u64, f64>,
+}
+
+enum AudioManagerDispatch {
+    Cpal(AudioManager<CpalBackend>),
+    RingBuffer(AudioManager<BufferBackend>),
 }
 
 struct PlayingSound {
     sound_data: StaticSoundData,
     handle: StaticSoundHandle,
     kind: CollectionKind,
+}
+
+struct BufferBackend {
+    audio_producer: Option<ringbuf::HeapProducer<u8>>,
+    thread_join_handle: Option<std::thread::JoinHandle<()>>,
+}
+
+struct BufferBackendSettings {
+    audio_producer: ringbuf::HeapProducer<u8>,
+}
+
+impl Backend for BufferBackend {
+    type Settings = BufferBackendSettings;
+
+    type Error = ();
+
+    fn setup(settings: Self::Settings) -> Result<(Self, u32), Self::Error> {
+        Ok((
+            BufferBackend {
+                audio_producer: Some(settings.audio_producer),
+                thread_join_handle: None,
+            },
+            48000,
+        ))
+    }
+
+    fn start(&mut self, mut renderer: kira::manager::backend::Renderer) -> Result<(), Self::Error> {
+        let mut producer = self.audio_producer.take().unwrap();
+        let mut intermediate = Vec::with_capacity(producer.capacity());
+        let join_handle = std::thread::spawn(move || loop {
+            intermediate.clear();
+
+            // 1 frame = 2 samples, at 4 bytes each
+            let frame_count = producer.free_len() / 8;
+            renderer.on_start_processing();
+            for _ in 0..frame_count {
+                let frame = renderer.process();
+                intermediate.extend(frame.left.to_le_bytes());
+                intermediate.extend(frame.right.to_le_bytes());
+            }
+
+            producer.push_slice(intermediate.as_mut_slice());
+
+            std::thread::sleep(Duration::from_millis(10));
+        });
+
+        self.thread_join_handle = Some(join_handle);
+        Ok(())
+    }
 }
 
 pub async fn poll_events(
@@ -78,9 +133,26 @@ fn pause_tween() -> Tween {
 }
 
 impl Player {
-    pub fn new() -> Result<Player, PlayerError> {
-        let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
-            .map_err(PlayerError::CpalError)?;
+    pub fn new(
+        maybe_ring_buffer: Option<ringbuf::HeapProducer<u8>>,
+    ) -> Result<Player, PlayerError> {
+        let manager = match maybe_ring_buffer {
+            Some(ring_buffer) => AudioManagerDispatch::RingBuffer(
+                AudioManager::<BufferBackend>::new(AudioManagerSettings {
+                    backend_settings: BufferBackendSettings {
+                        audio_producer: ring_buffer,
+                    },
+                    capacities: Default::default(),
+                    main_track_builder: Default::default(),
+                })
+                .unwrap(),
+            ),
+            None => AudioManagerDispatch::Cpal(
+                AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
+                    .map_err(PlayerError::CpalError)?,
+            ),
+        };
+
         let player = Player {
             manager,
             playing: Default::default(),
@@ -152,7 +224,7 @@ impl Player {
                         coll_id: id.coll_id,
                         clip_id: id.clip_id,
                     });
-                    to_remove.push((*id).clone());
+                    to_remove.push(*id);
                 }
                 _ => (),
             }
@@ -256,7 +328,7 @@ impl Player {
                 coll_id: id.coll_id,
                 clip_id: id.clip_id,
             });
-            to_remove.push((*id).clone());
+            to_remove.push(*id);
         }
 
         for id in to_remove.into_iter() {
@@ -298,4 +370,13 @@ pub enum PlayerError {
 
     #[error(transparent)]
     SendError(#[from] SendError<PlayerEvent>),
+}
+
+impl AudioManagerDispatch {
+    fn play<D: SoundData>(&mut self, sound_data: D) -> Result<D::Handle, PlaySoundError<D::Error>> {
+        match self {
+            AudioManagerDispatch::Cpal(mgr) => mgr.play(sound_data),
+            AudioManagerDispatch::RingBuffer(mgr) => mgr.play(sound_data),
+        }
+    }
 }
